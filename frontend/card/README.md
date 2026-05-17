@@ -10,6 +10,14 @@ npm run build
 npm run smoke
 ```
 
+## Hook pre-commit
+
+Après `npm install`, Husky active automatiquement le hook `pre-commit`.
+Il exécute `npm run precommit`, qui enchaîne :
+
+- `npm run lint`
+- `npm run build`
+
 ## Ce que ça fait
 
 - compile `frontend/card/src/index.ts`
