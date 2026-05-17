@@ -208,7 +208,22 @@ Structure :
 - `coordinator.py` : logique de récupération intelligente
 - `translations/fr.json` : interface en français
 - `manifest.json` : métadonnées et dépendances
-- `www/sncf-train-card.js` : carte Lovelace personnalisée
+- `frontend/card/src/` : source TypeScript de la carte Lovelace
+- `www/sncf-train-card.js` : bundle généré et servi à Home Assistant
+- `frontend/card/` : squelette TypeScript/Vite pour développer puis builder la carte vers `www/`
+
+### Build frontend (squelette)
+
+Le dossier `frontend/card/` contient un squelette prêt à l'emploi pour développer la carte en TypeScript.
+
+```bash
+cd frontend/card
+npm install
+npm run build
+npm run smoke
+```
+
+Le build génère `frontend/card/dist/sncf-train-card.js` puis le copie automatiquement vers `custom_components/sncf_trains/www/sncf-train-card.js`.
 
 ---
 
