@@ -1,0 +1,156 @@
+name: "Frontend card"
+
+on:
+  push:
+    paths:
+      - "frontend/card/**"
+      - ".github/workflows/frontend-card.yml"
+  pull_request:
+    paths:
+      - "frontend/card/**"
+      - ".github/workflows/frontend-card.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: "Build / lint frontend card"
+    runs-on: "ubuntu-latest"
+    defaults:
+      run:
+        working-directory: "frontend/card"
+        shell: "bash"
+    steps:
+      - name: "Checkout the repository"
+        uses: "actions/checkout@v6.0.1"
+
+      - name: "Set up Node.js"
+        uses: "actions/setup-node@v4"
+        with:
+          node-version: "22"
+
+      - name: "Install dependencies"
+        run: npm install
+
+      - name: "Run linter"
+        run: npm run lint
+
+      - name: "Build the frontend card"
+        run: npm run build
+
+  dependency-check:
+    name: "Check dependency updates"
+    runs-on: "ubuntu-latest"
+    defaults:
+      run:
+        working-directory: "frontend/card"
+        shell: "bash"
+    steps:
+      - name: "Checkout the repository"
+        uses: "actions/checkout@v6.0.1"
+
+      - name: "Set up Node.js"
+        uses: "actions/setup-node@v4"
+        with:
+          node-version: "22"
+
+      - name: "Inspect dependency updates with ncu"
+        run: |
+          set -euo pipefail
+
+          updates_file="$(mktemp)"
+          npx -y npm-check-updates --packageFile package.json --jsonUpgraded > "${updates_file}"
+
+          node - "${updates_file}" <<'NODE'
+          const fs = require("node:fs");
+
+          const updatesPath = process.argv[2];
+          const updates = JSON.parse(fs.readFileSync(updatesPath, "utf8") || "{}");
+          const packageJson = JSON.parse(fs.readFileSync("package.json", "utf8"));
+
+          const dependencySections = [
+            "dependencies",
+            "devDependencies",
+            "optionalDependencies",
+            "peerDependencies",
+          ];
+
+          const extractVersion = (value) => {
+            const match = String(value).match(/(\d+)\.(\d+)\.(\d+)/);
+            return match ? match.slice(1).map((part) => Number(part)) : null;
+          };
+
+          const classifyUpdate = (currentValue, nextValue) => {
+            const current = extractVersion(currentValue);
+            const next = extractVersion(nextValue);
+
+            if (!current || !next) {
+              return "major";
+            }
+
+            if (next[0] > current[0]) {
+              return "major";
+            }
+
+            if (next[0] < current[0]) {
+              return null;
+            }
+
+            if (next[1] > current[1]) {
+              return "minor";
+            }
+
+            if (next[1] < current[1]) {
+              return null;
+            }
+
+            if (next[2] > current[2]) {
+              return "patch";
+            }
+
+            return null;
+          };
+
+          const findCurrentVersion = (dependencyName) => {
+            for (const section of dependencySections) {
+              if (packageJson[section]?.[dependencyName]) {
+                return packageJson[section][dependencyName];
+              }
+            }
+
+            return null;
+          };
+
+          let hasPatchUpdates = false;
+          const dependencyNames = Object.keys(updates);
+
+          for (const dependencyName of dependencyNames) {
+            const currentVersion = findCurrentVersion(dependencyName);
+            const nextVersion = updates[dependencyName];
+            const updateType = classifyUpdate(currentVersion, nextVersion);
+            const summary = `${dependencyName}: ${currentVersion ?? "inconnu"} -> ${nextVersion}`;
+
+            if (updateType === "patch") {
+              console.log(`::error title=Patch update required::${summary}`);
+              hasPatchUpdates = true;
+              continue;
+            }
+
+            if (updateType === "minor") {
+              console.log(`::warning title=Minor update available::${summary}`);
+              continue;
+            }
+
+            console.log(`::notice title=Major update available::${summary}`);
+          }
+
+          if (dependencyNames.length === 0) {
+            console.log("::notice title=Dependencies up to date::Aucune mise à jour détectée par ncu.");
+          }
+
+          if (hasPatchUpdates) {
+            process.exit(1);
+          }
+          NODE

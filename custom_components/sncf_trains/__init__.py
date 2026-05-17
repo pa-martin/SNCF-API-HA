@@ -31,7 +31,7 @@ PLATFORMS: list[Platform] = [Platform.SENSOR, Platform.CALENDAR]
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
 CARD_URL = "/sncf_trains/sncf-train-card.js"
-CARD_FILE = Path(__file__).parent / "www" / "sncf-train-card.js"
+CARD_FILE = Path(__file__).parent / "frontend" / "sncf-train-card.js"
 LOGGER = getLogger(__name__)
 
 

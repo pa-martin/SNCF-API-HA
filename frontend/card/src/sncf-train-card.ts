@@ -1,113 +1,115 @@
-import { DEFAULT_CONFIG, HassLike, SncfTrainCardConfig, TrainAttributes } from './types';
-import { SncfTrainCardEditor } from './sncf-train-card-editor';
+import {DEFAULT_CONFIG, HassLike, SncfTrainCardConfig, Train, TrainAttributes} from './types';
+import {SncfTrainCardEditor} from './sncf-train-card-editor';
 
 export class SncfTrainCard extends HTMLElement {
-  private _config: SncfTrainCardConfig = DEFAULT_CONFIG;
-  private _hass?: HassLike;
-  private _updateInterval: ReturnType<typeof setInterval> | null = null;
-  private _lastRender = 0;
-  private _lastSignature = '';
-  private _forceRender = true;
+    private _config: SncfTrainCardConfig = DEFAULT_CONFIG;
+    private _hass?: HassLike;
+    private _updateInterval: ReturnType<typeof setInterval> | null = null;
+    private _lastSignature = '';
+    private _forceRender = true;
 
-  constructor() {
-    super();
-    this.attachShadow({ mode: 'open' });
-  }
-
-  setConfig(config: Partial<SncfTrainCardConfig> | undefined) {
-    if (!config?.device_id) throw new Error('You need to define device_id');
-    this._config = { ...DEFAULT_CONFIG, ...config };
-    this._forceRender = true;
-    this._restartTimer();
-    this.render();
-  }
-
-  set hass(hass: HassLike | undefined) {
-    this._hass = hass;
-    this._forceRender = true;
-    this.render();
-  }
-
-  connectedCallback() {
-    this._restartTimer();
-  }
-
-  disconnectedCallback() {
-    if (this._updateInterval) clearInterval(this._updateInterval);
-    this._updateInterval = null;
-  }
-
-  getCardSize() {
-    return Math.max(3, this._config.train_lines + 1);
-  }
-
-  getConfigElement() {
-    const editor = document.createElement('sncf-train-card-editor') as SncfTrainCardEditor;
-    editor.setConfig(this._config);
-    editor.addEventListener('config-changed', (ev: Event) => {
-      const detail = (ev as CustomEvent<{ config: Partial<SncfTrainCardConfig> }>).detail;
-      this.setConfig(detail.config);
-    });
-    return editor;
-  }
-
-  private _restartTimer() {
-    if (this._updateInterval) clearInterval(this._updateInterval);
-    this._updateInterval = setInterval(() => this.render(), this._config.update_interval);
-  }
-
-  private async _getTrainEntities(): Promise<Array<{ entity_id: string; attributes: TrainAttributes }>> {
-    if (!this._hass) return [];
-
-    const states = this._hass.states ?? {};
-    const fallback = Object.values(states).filter((s) => s.entity_id.includes('train'));
-
-    try {
-      const registry = await this._hass.callWS?.({ type: 'config/entity_registry/list' });
-      if (!Array.isArray(registry) || registry.length === 0) return fallback;
-      const ids = new Set(
-        registry.filter((entry) => entry.device_id === this._config.device_id).map((entry) => entry.entity_id)
-      );
-      return Object.values(states).filter((state) => ids.has(state.entity_id) && state.attributes?.departure_time) as Array<{ entity_id: string; attributes: TrainAttributes }>;
-    } catch {
-      return fallback as Array<{ entity_id: string; attributes: TrainAttributes }>;
+    constructor() {
+        super();
+        this.attachShadow({mode: 'open'});
     }
-  }
 
-  private _parseTime(value?: string) {
-    if (!value) return new Date(0);
-    if (value.includes('/') && value.includes(' - ')) {
-      const [datePart, timePart] = value.split(' - ');
-      const [day, month, year] = datePart.split('/').map((part) => Number.parseInt(part, 10));
-      const [hour, minute] = timePart.split(':').map((part) => Number.parseInt(part, 10));
-      return new Date(year, month - 1, day, hour, minute);
+    setConfig(config: Partial<SncfTrainCardConfig> | undefined) {
+        if (!config?.device_id) throw new Error('You need to define device_id');
+        this._config = {...DEFAULT_CONFIG, ...config};
+        this._forceRender = true;
+        this._restartTimer();
+        this.render();
     }
-    return new Date(value);
-  }
 
-  private _formatTime(value?: string) {
-    if (!value) return 'N/A';
-    const date = this._parseTime(value);
-    return Number.isNaN(date.getTime()) ? 'Format invalide' : date.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
-  }
+    set hass(hass: HassLike | undefined) {
+        this._hass = hass;
+        this._forceRender = true;
+        this.render();
+    }
 
-  private _trainPosition(departureTime?: string) {
-    if (!departureTime) return -10;
-    const departure = this._parseTime(departureTime);
-    if (Number.isNaN(departure.getTime())) return -10;
-    const diffMinutes = (departure.getTime() - Date.now()) / 60000;
-    if (this._config.animation_duration === 0) return diffMinutes <= 0 ? 100 : -10;
-    if (diffMinutes > this._config.animation_duration) return -10;
-    if (diffMinutes <= 0) return 100;
-    return ((this._config.animation_duration - diffMinutes) / this._config.animation_duration) * 100;
-  }
+    connectedCallback() {
+        this._restartTimer();
+    }
 
-  private _trainColor(delayMinutes: number, hasDelay: boolean) {
-    return !hasDelay || delayMinutes === 0 ? '#4caf50' : '#f44336';
-  }
+    disconnectedCallback() {
+        if (this._updateInterval) clearInterval(this._updateInterval);
+        this._updateInterval = null;
+    }
 
-  private _renderStyles() {
-    return `
+    getCardSize() {
+        return Math.max(3, this._config.train_lines + 1);
+    }
+
+    getConfigElement() {
+        const editor = document.createElement('sncf-train-card-editor') as SncfTrainCardEditor;
+        editor.setConfig(this._config);
+        editor.addEventListener('config-changed', (ev: Event) => {
+            const detail = (ev as CustomEvent<{ config: Partial<SncfTrainCardConfig> }>).detail;
+            this.setConfig(detail.config);
+        });
+        return editor;
+    }
+
+    private _restartTimer() {
+        if (this._updateInterval) clearInterval(this._updateInterval);
+        this._updateInterval = setInterval(() => this.render(), this._config.update_interval);
+    }
+
+    private async _getTrainEntities(): Promise<Array<Train>> {
+        if (!this._hass) return [];
+
+        const states = this._hass.states ?? {};
+        const fallback: Array<Train> = Object.values(states).filter((s) => s.entity_id.includes('train'));
+
+        try {
+            const registry = await this._hass.callWS?.({type: 'config/entity_registry/list'});
+            if (!Array.isArray(registry) || registry.length === 0) return fallback;
+            const ids = new Set(
+                registry.filter((entry) => entry.device_id === this._config.device_id).map((entry) => entry.entity_id)
+            );
+            return Object.values(states).filter((state) => ids.has(state.entity_id) && state.attributes?.departure_time) as Array<Train>;
+        } catch {
+            return fallback;
+        }
+    }
+
+    private _parseTime(value?: string) {
+        if (!value) return new Date(0);
+        if (value.includes('/') && value.includes(' - ')) {
+            const [datePart, timePart] = value.split(' - ');
+            const [day, month, year] = datePart.split('/').map((part) => Number.parseInt(part, 10));
+            const [hour, minute] = timePart.split(':').map((part) => Number.parseInt(part, 10));
+            return new Date(year, month - 1, day, hour, minute);
+        }
+        return new Date(value);
+    }
+
+    private _formatTime(value?: string) {
+        if (!value) return 'N/A';
+        const date = this._parseTime(value);
+        return Number.isNaN(date.getTime()) ? 'Format invalide' : date.toLocaleTimeString('fr-FR', {
+            hour: '2-digit',
+            minute: '2-digit'
+        });
+    }
+
+    private _trainPosition(departureTime?: string) {
+        if (!departureTime) return -10;
+        const departure = this._parseTime(departureTime);
+        if (Number.isNaN(departure.getTime())) return -10;
+        const diffMinutes = (departure.getTime() - Date.now()) / 60000;
+        if (this._config.animation_duration === 0) return diffMinutes <= 0 ? 100 : -10;
+        if (diffMinutes > this._config.animation_duration) return -10;
+        if (diffMinutes <= 0) return 100;
+        return ((this._config.animation_duration - diffMinutes) / this._config.animation_duration) * 100;
+    }
+
+    private _trainColor(delayMinutes: number, hasDelay: boolean) {
+        return !hasDelay || delayMinutes === 0 ? '#4caf50' : '#f44336';
+    }
+
+    private _renderStyles() {
+        return `
       <style>
         :host { --sncf-track-height: 8px; --sncf-track-gap: 16px; display: block; }
         ha-card { padding: 16px; background: var(--card-background-color, #fff); color: var(--primary-text-color, #000); border-radius: var(--ha-card-border-radius, 12px); box-shadow: var(--ha-card-box-shadow, 0 2px 4px rgba(0,0,0,0.1)); overflow: hidden; }
@@ -133,14 +135,14 @@ export class SncfTrainCard extends HTMLElement {
         .delay { color: var(--error-color, #f44336); }
         .error { color: var(--error-color, #f44336); text-align: center; padding: 20px; font-weight: 500; }
       </style>`;
-  }
+    }
 
-  private _renderDeparture(attrs: TrainAttributes) {
-    const hasDelay = Boolean(attrs.has_delay);
-    const delayMinutes = attrs.delay_minutes ?? 0;
-    const planned = this._formatTime(attrs.base_departure_time);
-    const real = this._formatTime(attrs.departure_time);
-    return `
+    private _renderDeparture(attrs: TrainAttributes) {
+        const hasDelay = Boolean(attrs.has_delay);
+        const delayMinutes = attrs.delay_minutes ?? 0;
+        const planned = this._formatTime(attrs.base_departure_time);
+        const real = this._formatTime(attrs.departure_time);
+        return `
       <div class="station">
         <div class="station-info">
           <div class="arrival-time-container">
@@ -150,14 +152,14 @@ export class SncfTrainCard extends HTMLElement {
         </div>
         <div class="station-emoji">${this._config.departure_station_emoji}</div>
       </div>`;
-  }
+    }
 
-  private _renderArrival(attrs: TrainAttributes) {
-    const hasDelay = Boolean(attrs.has_delay);
-    const delayMinutes = attrs.delay_minutes ?? 0;
-    const planned = this._formatTime(attrs.base_arrival_time);
-    const real = this._formatTime(attrs.arrival_time);
-    return `
+    private _renderArrival(attrs: TrainAttributes) {
+        const hasDelay = Boolean(attrs.has_delay);
+        const delayMinutes = attrs.delay_minutes ?? 0;
+        const planned = this._formatTime(attrs.base_arrival_time);
+        const real = this._formatTime(attrs.arrival_time);
+        return `
       <div class="station">
         <div class="station-emoji">${this._config.arrival_station_emoji}</div>
         <div class="station-info">
@@ -167,44 +169,44 @@ export class SncfTrainCard extends HTMLElement {
           <div class="delay-info ${hasDelay ? 'delay' : 'on-time'}">${hasDelay ? `+${delayMinutes}min` : 'À l\'heure'}</div>
         </div>
       </div>`;
-  }
-
-  private async _signature(trains: Array<{ entity_id: string; attributes: TrainAttributes }>) {
-    return trains.map((train) => `${train.entity_id}:${train.attributes.departure_time}:${train.attributes.delay_minutes ?? 0}:${train.attributes.has_delay ?? false}`).join('|');
-  }
-
-  async render() {
-    if (!this.shadowRoot) return;
-
-    const trains = await this._getTrainEntities();
-    const signature = await this._signature(trains);
-    if (!this._forceRender && signature === this._lastSignature && this.shadowRoot.innerHTML) return;
-    this._lastSignature = signature;
-    this._forceRender = false;
-
-    if (trains.length === 0) {
-      this.shadowRoot.innerHTML = `${this._renderStyles()}<ha-card><div class="card-content"><div class="error">Aucun train trouvé pour ce device. Vérifiez la configuration.</div></div></ha-card>`;
-      return;
     }
 
-    const items = trains.slice(0, this._config.train_lines).map((train) => {
-      const attrs = train.attributes;
-      const position = this._trainPosition(attrs.departure_time);
-      const delayMinutes = attrs.delay_minutes ?? 0;
-      const hasDelay = Boolean(attrs.has_delay);
-      const trainColor = this._trainColor(delayMinutes, hasDelay);
-      const emojiClass = this._config.train_emoji_axial_symmetry ? 'train-emoji-axial-symmetry' : '';
-      const trainPositionHTML = position >= 0 && position <= 100 ? `<div class="train-emoji ${emojiClass}" style="left:${position}%;color:${trainColor};">${this._config.train_emoji}</div>` : '';
+    private async _signature(trains: Array<Train>) {
+        return trains.map((train) => `${train.entity_id}:${train.attributes?.departure_time}:${train.attributes?.delay_minutes ?? 0}:${train.attributes?.has_delay ?? false}`).join('|');
+    }
 
-      return `
+    async render() {
+        if (!this.shadowRoot) return;
+
+        const trains = await this._getTrainEntities();
+        const signature = await this._signature(trains);
+        if (!this._forceRender && signature === this._lastSignature && this.shadowRoot.innerHTML) return;
+        this._lastSignature = signature;
+        this._forceRender = false;
+
+        if (trains.length === 0) {
+            this.shadowRoot.innerHTML = `${this._renderStyles()}<ha-card><div class="card-content"><div class="error">Aucun train trouvé pour ce device. Vérifiez la configuration.</div></div></ha-card>`;
+            return;
+        }
+
+        const items = trains.slice(0, this._config.train_lines).map((train) => {
+            const attrs = train.attributes ?? {};
+            const position = this._trainPosition(attrs.departure_time);
+            const delayMinutes = attrs.delay_minutes ?? 0;
+            const hasDelay = Boolean(attrs.has_delay);
+            const trainColor = this._trainColor(delayMinutes, hasDelay);
+            const emojiClass = this._config.train_emoji_axial_symmetry ? 'train-emoji-axial-symmetry' : '';
+            const trainPositionHTML = position >= 0 && position <= 100 ? `<div class="train-emoji ${emojiClass}" style="left:${position}%;color:${trainColor};">${this._config.train_emoji}</div>` : '';
+
+            return `
         <div class="train-line ${this._config.show_departure_station ? 'left-departure-time' : ''}">
           ${this._config.show_departure_station ? this._renderDeparture(attrs) : ''}
           <div class="train-track ${hasDelay ? 'delayed' : ''}">${trainPositionHTML}</div>
           ${this._config.show_arrival_station ? this._renderArrival(attrs) : ''}
         </div>`;
-    }).join('');
+        }).join('');
 
-    this.shadowRoot.innerHTML = `${this._renderStyles()}<ha-card><div class="train-card"><div class="train-header"><div>${this._config.title}</div></div>${items}</div></ha-card>`;
-  }
+        this.shadowRoot.innerHTML = `${this._renderStyles()}<ha-card><div class="train-card"><div class="train-header"><div>${this._config.title}</div></div>${items}</div></ha-card>`;
+    }
 }
 

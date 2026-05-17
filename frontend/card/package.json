@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "vite build && node scripts/copy-to-www.mjs",
+    "build": "vite build && node scripts/copy-to-component.mjs",
     "smoke": "npm run build && node scripts/smoke.mjs",
     "watch": "vite build --watch",
     "lint": "tsc --noEmit"
